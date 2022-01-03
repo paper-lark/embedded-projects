@@ -1,11 +1,18 @@
 #![no_std]
 #![no_main]
 
-use arduino_hal::hal::port::{PB0, PB1, PB2, PB3, PD2, PD3, PD4, PD5, PD6, PD7};
+use core::u8;
+use arduino_hal::hal::Atmega;
+use arduino_hal::hal::port::{PB0, PB1, PB2, PB3, PD0, PD1, PD2, PD3, PD4, PD5, PD6, PD7};
+use arduino_hal::pac::USART0;
 use arduino_hal::port::mode::Output;
 use arduino_hal::port::Pin;
 use panic_halt as _;
+use embedded_hal::serial::Read;
 use arduino_hal::prelude::*;
+use arduino_hal::{DefaultClock};
+use avr_hal_generic::port::mode::Input;
+use avr_hal_generic::usart::Usart;
 
 struct Pins {
     pub p2: Pin<Output, PD2>,
@@ -18,6 +25,12 @@ struct Pins {
     pub p9: Pin<Output, PB1>,
     pub p10: Pin<Output, PB2>,
     pub p11: Pin<Output, PB3>,
+}
+
+impl Pins {
+    fn len() -> usize {
+        return 10;
+    }
 }
 
 macro_rules! with_pin {
@@ -41,10 +54,25 @@ macro_rules! with_pin {
     };
 }
 
+fn read_number(serial: &mut Usart<Atmega, USART0, Pin<Input, PD0>, Pin<Output, PD1>, DefaultClock>) -> u8 {
+    let mut input: u8 = 0;
+    let mut had_input = false;
+    loop {
+        let b = nb::block!(serial.read()).void_unwrap() as char;
+        if b >= '0' && b <= '9' {
+            had_input = true;
+            input = input * 10 + (b as u8 - '0' as u8);
+        } else if had_input {
+            return input;
+        }
+    }
+}
+
 #[arduino_hal::entry]
 fn main() -> ! {
     let dp = arduino_hal::Peripherals::take().unwrap();
     let pins = arduino_hal::pins!(dp);
+    let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
 
     let mut pins = Pins {
         p2: pins.d2.into_output(),
@@ -59,19 +87,19 @@ fn main() -> ! {
         p11: pins.d11.into_output()
     };
 
-    let mut i: u8 = 0;
-    let mut cnt: u8 = 0;
     loop {
-        if cnt % 2 == 0 {
-            with_pin!(pins, i, Pin::set_high);
-        } else {
-            with_pin!(pins, i, Pin::set_low);
-        }
-        arduino_hal::delay_ms(500);
-        i = i + 1;
-        if i > 9 {
-            i = 0;
-            cnt += 1;
+        // read value
+        let input = read_number(&mut serial);
+
+        // light LEDs
+        let scaled = input as usize * (Pins::len() + 1) / u8::MAX as usize;
+        ufmt::uwriteln!(&mut serial, "Lighting up to {}\n", scaled).void_unwrap();
+        for i in 0..Pins::len() {
+            if i < scaled {
+                with_pin!(pins, i, Pin::set_high);
+            } else {
+                with_pin!(pins, i, Pin::set_low);
+            }
         }
     }
 }

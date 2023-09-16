@@ -6,10 +6,12 @@
 
 static pt pt1, pt2;
 
-PT_THREAD(blinkCoro(struct pt* pt, int led_pin, int interval)) {
+static int blinkCoro(struct pt *pt, int led_pin, int interval)
+{
     PT_BEGIN(pt);
 
-    for(;;) {
+    for (;;)
+    {
         PT_SLEEP(pt, interval);
         digitalWrite(led_pin, HIGH);
         PT_SLEEP(pt, interval);
@@ -19,7 +21,8 @@ PT_THREAD(blinkCoro(struct pt* pt, int led_pin, int interval)) {
     PT_END(pt);
 }
 
-void setup() {
+void setup()
+{
     PT_INIT(&pt1);
     PT_INIT(&pt2);
 
@@ -27,7 +30,8 @@ void setup() {
     pinMode(SECOND_LED_PIN, OUTPUT);
 }
 
-void loop() {
+void loop()
+{
     blinkCoro(&pt1, FIRST_LED_PIN, 1000);
     blinkCoro(&pt2, SECOND_LED_PIN, 2000);
 }
